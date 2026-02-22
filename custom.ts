@@ -173,66 +173,55 @@ namespace A4_Lampadaire {
         Magenta = 4
     }
 
-    /**
-     * Allumage progressif (couleur) de 0 à (x) % en (t) s
-     */
-    //% block="Allumage progressif ($couleur) de 0 à $x % en $t s"
-    //% inlineInputMode=inline
-    //% x.min=0 x.max=100 x.defl=100
-    //% t.min=0 t.max=60 t.defl=5
-    //% advanced=true
-    export function allumageProgressif(couleur: CouleurAllumage, x: number, t: number): void {
-        // Bornage
-        if (x < 0) x = 0
-        else if (x > 100) x = 100
-        if (t < 0) t = 0
-        else if (t > 60) t = 60
+/**
+ * Allumage progressif (couleur) de 0 à (x) % en (t) s
+ */
+//% block="Allumage progressif ($couleur) de 0 à $x % en $t s"
+//% inlineInputMode=inline
+//% x.min=0 x.max=100 x.defl=100
+//% t.min=0 t.max=60 t.defl=5
+//% advanced=true
+export function allumageProgressif(couleur: CouleurAllumage, x: number, t: number): void {
+    // Bornage
+    if (x < 0) x = 0
+    else if (x > 100) x = 100
+    if (t < 0) t = 0
+    else if (t > 60) t = 60
 
-        const s = getRuban()
+    const s = getRuban()
 
-        // Choix couleur
-        let col = NeoPixelColors.White
-        switch (couleur) {
-            case CouleurAllumage.Blanc:
-                col = NeoPixelColors.White
-                break
-            case CouleurAllumage.Bleu:
-                col = NeoPixelColors.Blue
-                break
-            case CouleurAllumage.Vert:
-                col = NeoPixelColors.Green
-                break
-            case CouleurAllumage.Magenta:
-                col = neopixel.rgb(255, 0, 255)
-                break
-        }
-
-        const cible255 = Math.idiv(x * 255, 100)
-
-        // Charge la couleur et démarre à 0
-        s.setBrightness(0)
-        s.showColor(col) // brightness=0 => éteint
-
-        // Si t = 0 : application directe
-        if (t == 0) {
-            puissancePct = x
-            s.setBrightness(cible255)
-            s.show()
-            return
-        }
-
-        // Rampe : 10 mises à jour par seconde (max 600 étapes pour 60s)
-        const steps = t * 10
-        const pauseMs = Math.idiv(t * 1000, steps)
-
-        for (let i = 0; i <= steps; i++) {
-            const b = Math.idiv(cible255 * i, steps)
-            s.setBrightness(b)
-            s.show()
-            if (i < steps) basic.pause(pauseMs)
-        }
-
-        // Mémorise la puissance finale pour les autres blocs
-        puissancePct = x
+    // Choix couleur
+    let col = NeoPixelColors.White
+    switch (couleur) {
+        case CouleurAllumage.Blanc:   col = NeoPixelColors.White; break
+        case CouleurAllumage.Bleu:    col = NeoPixelColors.Blue; break
+        case CouleurAllumage.Vert:    col = NeoPixelColors.Green; break
+        case CouleurAllumage.Magenta: col = neopixel.rgb(255, 0, 255); break
     }
+
+    const cible255 = Math.idiv(x * 255, 100)
+
+    // Cas immédiat
+    if (t == 0) {
+        puissancePct = x
+        s.setBrightness(cible255)
+        s.showColor(col)
+        return
+    }
+
+    // Rampe ~10 updates/s
+    const steps = t * 10
+    const pauseMs = Math.idiv(t * 1000, steps)
+
+    for (let i = 0; i <= steps; i++) {
+        const b = Math.idiv(cible255 * i, steps)
+        s.setBrightness(b)
+        // IMPORTANT : on réécrit la couleur à chaque pas
+        s.showColor(col)
+        if (i < steps) basic.pause(pauseMs)
+    }
+
+    // Mémorise la puissance finale
+    puissancePct = x
+}
 }
