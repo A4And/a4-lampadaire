@@ -23,7 +23,7 @@ namespace A4_Lampadaire {
 
     function getRuban(): neopixel.Strip {
         if (!ruban) {
-            // NeoPixelMode.RGB = "RGB (GRB format)" dans pxt-neopixel (WS2812B classique)
+            // NeoPixelMode.RGB = format utilisé par pxt-neopixel (WS2812B classique)
             ruban = neopixel.create(PIN_NEOPIXEL, NB_LED, NeoPixelMode.RGB)
             ruban.clear()
             ruban.show()
@@ -49,7 +49,6 @@ namespace A4_Lampadaire {
         return neopixel.rgb(rr, gg, bb)
     }
 
-    // Applique immédiatement la couleurBase avec une puissance donnée
     function appliquerCouleur(pct: number): void {
         const s = getRuban()
         const rgb = scaleRGB(couleurBase, pct)
@@ -101,14 +100,13 @@ namespace A4_Lampadaire {
     /**
      * Éteindre le lampadaire :
      * - met P0 à 0
-     * - coupe aussi le ruban (sinon l'éclairage peut rester actif)
+     * - coupe aussi le ruban + annule toute rampe en cours
      */
     //% block="Eteindre Lampadaire"
     export function eteindreLampadaire(): void {
         pins.digitalWritePin(DigitalPin.P0, 0)
         basic.showNumber(0)
 
-        // Stoppe toute rampe en cours + éteint le ruban
         annulerEclairageEnCours()
         couleurBase = 0x000000
         appliquerCouleur(0)
@@ -136,10 +134,10 @@ namespace A4_Lampadaire {
         niveau = clampPct(niveau)
         puissancePct = niveau
 
-        // Si un progressif tourne, on l'annule pour éviter les "conflits"
+        // Un réglage manuel annule une rampe en cours
         annulerEclairageEnCours()
 
-        // Réapplique la couleur actuelle avec la nouvelle puissance
+        // Réapplique la couleur courante avec la nouvelle puissance
         appliquerCouleur(puissancePct)
     }
 
@@ -174,7 +172,7 @@ namespace A4_Lampadaire {
     }
 
     // -----------------------------
-    // Avancé... : allumage progressif
+    // Avancé... : éclairage progressif
     // -----------------------------
     export enum CouleurAllumage {
         //% block="Blanc"
@@ -188,15 +186,18 @@ namespace A4_Lampadaire {
     }
 
     /**
-     * Allumage progressif (couleur) de 0 à (x) % en (t) s
+     * Eclairage progressif (couleur) de (x1) à (x2) % en (t) s
+     * Permet allumage progressif (x1<x2) ou extinction progressive (x1>x2)
      */
-    //% block="Allumage progressif ($couleur) de 0 à $x % en $t s"
+    //% block="Eclairage progressif ($couleur) de $x1 à $x2 % en $t s"
     //% inlineInputMode=inline
-    //% x.min=0 x.max=100 x.defl=100
+    //% x1.min=0 x1.max=100 x1.defl=0
+    //% x2.min=0 x2.max=100 x2.defl=100
     //% t.min=0 t.max=60 t.defl=5
     //% advanced=true
-    export function allumageProgressif(couleur: CouleurAllumage, x: number, t: number): void {
-        x = clampPct(x)
+    export function eclairageProgressif(couleur: CouleurAllumage, x1: number, x2: number, t: number): void {
+        x1 = clampPct(x1)
+        x2 = clampPct(x2)
         if (t < 0) t = 0
         else if (t > 60) t = 60
 
@@ -214,7 +215,7 @@ namespace A4_Lampadaire {
 
         // Cas immédiat
         if (t == 0) {
-            puissancePct = x
+            puissancePct = x2
             appliquerCouleur(puissancePct)
             return
         }
@@ -223,17 +224,20 @@ namespace A4_Lampadaire {
         const steps = t * 10
         const pauseMs = Math.idiv(t * 1000, steps)
 
+        // Applique dès le départ x1
+        appliquerCouleur(x1)
+
         for (let i = 0; i <= steps; i++) {
-            // Si un autre ordre a été donné, on stoppe
             if (eclairageToken != myToken) return
 
-            const pct = Math.idiv(x * i, steps)
+            // interpolation linéaire : pct = (x1*(steps-i) + x2*i)/steps
+            const pct = Math.idiv(x1 * (steps - i) + x2 * i, steps)
             appliquerCouleur(pct)
 
             if (i < steps) basic.pause(pauseMs)
         }
 
-        // Mémorise la puissance finale comme puissance courante
-        puissancePct = x
+        // Mémorise la puissance finale
+        puissancePct = x2
     }
 }
