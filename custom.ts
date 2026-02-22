@@ -19,7 +19,17 @@ namespace A4_Lampadaire {
         }
         return ruban
     }
-
+export enum CouleurAllumage {
+    //% block="Blanc"
+    Blanc = 1,
+    //% block="Bleu"
+    Bleu = 2,
+    //% block="Vert"
+    Vert = 3,
+    //% block="Magenta"
+    Magenta = 4
+}
+    
     let seuilJourNuitPct = 50
     let seuilJourNuitLL = 127
 
@@ -115,4 +125,60 @@ namespace A4_Lampadaire {
                 break
         }
     }
+}
+/**
+ * Allumage progressif (couleur) de 0 à (x) % en (t) s
+ */
+//% block="Allumage progressif ($couleur) de 0 à $puissance % en $temps s"
+//% inlineInputMode=inline
+//% puissance.min=0 puissance.max=100 puissance.defl=100
+//% temps.min=0 temps.max=60 temps.defl=5
+//% advanced=true
+export function allumageProgressif(couleur: CouleurAllumage, puissance: number, temps: number): void {
+    // bornage
+    if (puissance < 0) puissance = 0
+    else if (puissance > 100) puissance = 100
+    if (temps < 0) temps = 0
+    else if (temps > 60) temps = 60
+
+    const s = getRuban()
+
+    // Choix couleur -> RGB
+    let c = NeoPixelColors.White
+    switch (couleur) {
+        case CouleurAllumage.Blanc:   c = NeoPixelColors.White; break
+        case CouleurAllumage.Bleu:    c = NeoPixelColors.Blue; break
+        case CouleurAllumage.Vert:    c = NeoPixelColors.Green; break
+        case CouleurAllumage.Magenta: c = neopixel.rgb(255, 0, 255); break
+    }
+
+    const cible255 = Math.idiv(puissance * 255, 100)
+
+    // Démarrage à 0 (éteint) + couleur déjà chargée dans le ruban
+    s.setBrightness(0)
+    s.showColor(c) // affichage "off" car brightness=0
+
+    // Si temps = 0, on applique directement
+    if (temps == 0) {
+        puissancePct = puissance          // mémorise la puissance choisie
+        s.setBrightness(cible255)
+        s.show()
+        return
+    }
+
+    const dureeMs = temps * 1000
+    // ~10 mises à jour / seconde (pas trop lourd, assez fluide)
+    let steps = Math.idiv(dureeMs, 100)
+    if (steps < 1) steps = 1
+    const pauseMs = Math.idiv(dureeMs, steps)
+
+    for (let i = 0; i <= steps; i++) {
+        const b = Math.idiv(cible255 * i, steps)
+        s.setBrightness(b)
+        s.show()
+        if (i < steps) basic.pause(pauseMs)
+    }
+
+    // mémorise la puissance finale pour les autres blocs
+    puissancePct = puissance
 }
