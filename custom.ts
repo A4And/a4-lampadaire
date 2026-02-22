@@ -1,24 +1,37 @@
 /**
- * Extension A4_Lampadaire - MakeCode micro:bit blocks
+ * Extension A4_Lampadaire - Blocs MakeCode micro:bit
  */
-//% block="A4_Street Light" color=#3399FF icon="\uf0eb" weight=45
+//% block="A4_Lampadaire" color=#3399FF icon="\uf0eb" weight=45
 namespace A4_Lampadaire {
 
     // -----------------------------
-    // NeoPixel hardware (P1, 10 LEDs)
+    // Matériel NeoPixel (P0, 10 LED)
     // -----------------------------
     const NB_LED = 10
-    const PIN_NEOPIXEL = DigitalPin.P1
+    const PIN_NEOPIXEL = DigitalPin.P0
+
+    // -----------------------------
+    // PIR (P1)
+    // -----------------------------
+    const PIN_PIR = DigitalPin.P1
+    let pirInit = false
+    function initPIR(): void {
+        if (!pirInit) {
+            // Stabilise l'entrée si le PIR flotte parfois
+            pins.setPull(PIN_PIR, PinPullMode.PullDown)
+            pirInit = true
+        }
+    }
 
     let ruban: neopixel.Strip = null
 
-    // Base color (at 100%) stored as 0xRRGGBB
+    // Couleur de référence (à 100%) mémorisée (0xRRGGBB)
     let couleurBase = 0x000000
 
-    // Stored power in % (0..100). Default: 100%
+    // Puissance mémorisée en % (0..100). Défaut : 100%
     let puissancePct = 100
 
-    // Cancellation token: any new lighting command increments it
+    // Token d'annulation : chaque nouvel ordre d'éclairage l'incrémente
     let eclairageToken = 0
 
     function getRuban(): neopixel.Strip {
@@ -36,7 +49,7 @@ namespace A4_Lampadaire {
         return v
     }
 
-    // Applies a power (0..100%) to a 0xRRGGBB color
+    // Applique une puissance (0..100%) à une couleur 0xRRGGBB
     function scaleRGB(rgb: number, pct: number): number {
         pct = clampPct(pct)
         const r = (rgb >> 16) & 0xFF
@@ -59,7 +72,7 @@ namespace A4_Lampadaire {
     }
 
     // -----------------------------
-    // Day / Night (light sensor)
+    // Jour / Nuit (capteur lumière)
     // -----------------------------
     let seuilJourNuitPct = 50
     let seuilJourNuitLL = 127
@@ -77,73 +90,90 @@ namespace A4_Lampadaire {
         return Math.idiv(input.lightLevel() * 100, 255)
     }
 
-    //% block="Day"
+    //% block="Jour"
     export function jour(): boolean {
         return input.lightLevel() > seuilJourNuitLL
     }
 
-    //% block="Night"
+    //% block="Nuit"
     export function nuit(): boolean {
         return input.lightLevel() <= seuilJourNuitLL
     }
 
     // -----------------------------
-    // Street light relay (P0)
+    // PIR : Présence détectée (losange)
     // -----------------------------
-    //% block="Switch On"
+    /**
+     * Présence détectée : true si le PIR renvoie 1
+     */
+    //% block="Présence détectée"
+    export function presenceDetectee(): boolean {
+        initPIR()
+        return pins.digitalReadPin(PIN_PIR) == 1
+    }
+
+    // -----------------------------
+    // Lampadaire = ruban NeoPixel
+    // -----------------------------
+    //% block="Allumer Lampadaire"
     export function allumerLampadaire(): void {
-        pins.digitalWritePin(DigitalPin.P0, 1)
+        // Si aucune couleur n'a été définie, on met blanc par défaut
+        if (couleurBase == 0x000000) couleurBase = 0xFFFFFF
+
+        // Annule une rampe éventuelle, puis applique la puissance courante
+        annulerEclairageEnCours()
+        appliquerCouleur(puissancePct)
+
         basic.showNumber(1)
     }
 
     /**
-     * Switch off:
-     * - sets P0 to 0
-     * - also turns off the LED strip and cancels any running ramp
+     * Éteindre le lampadaire :
+     * - annule toute rampe en cours
+     * - éteint le ruban
      */
-    //% block="Switch Off"
+    //% block="Eteindre Lampadaire"
     export function eteindreLampadaire(): void {
-        pins.digitalWritePin(DigitalPin.P0, 0)
-        basic.showNumber(0)
-
         annulerEclairageEnCours()
         couleurBase = 0x000000
         appliquerCouleur(0)
+
+        basic.showNumber(0)
     }
 
     // -----------------------------
-    // NeoPixel lighting (P1)
+    // Eclairage NeoPixel
     // -----------------------------
     export enum ModeEclairage {
-        //% block="Off"
+        //% block="Eteindre"
         Eteindre = 0,
-        //% block="White"
+        //% block="Blanc"
         Blanc = 1,
-        //% block="Blue"
+        //% block="Bleu"
         Bleu = 2,
-        //% block="Green"
+        //% block="Vert"
         Vert = 3,
         //% block="Magenta"
         Magenta = 4
     }
 
-    //% block="Light power (0 to 100) $x"
-    //% x.min=0 x.max=100 x.defl=100
-    export function puissanceEclairage(x: number): void {
-        x = clampPct(x)
-        puissancePct = x
+    //% block="Puissance éclairage (0 à 100) $niveau"
+    //% niveau.min=0 niveau.max=100 niveau.defl=100
+    export function puissanceEclairage(niveau: number): void {
+        niveau = clampPct(niveau)
+        puissancePct = niveau
 
-        // Manual change cancels any running ramp
+        // Un réglage manuel annule une rampe en cours
         annulerEclairageEnCours()
 
-        // Re-apply current color with new power
+        // Réapplique la couleur courante avec la nouvelle puissance
         appliquerCouleur(puissancePct)
     }
 
-    //% block="Street light $mode"
+    //% block="Eclairage $mode"
     //% mode.defl=ModeEclairage.Eteindre
     export function eclairage(mode: ModeEclairage): void {
-        // Any manual command cancels a running ramp
+        // Tout ordre “manuel” annule une rampe en cours
         annulerEclairageEnCours()
 
         switch (mode) {
@@ -171,7 +201,7 @@ namespace A4_Lampadaire {
     }
 
     // -----------------------------
-    // Advanced... : progressive lighting
+    // Avancé... : éclairage progressif
     // -----------------------------
     export enum CouleurAllumage {
         //% block="Blanc"
@@ -186,6 +216,7 @@ namespace A4_Lampadaire {
 
     /**
      * Eclairage progressif (couleur) de (x1) à (x2) % en (t) s
+     * Permet allumage progressif (x1<x2) ou extinction progressive (x1>x2)
      */
     //% block="Eclairage progressif ($couleur) de $x1 à $x2 % en $t s"
     //% inlineInputMode=inline
@@ -199,11 +230,11 @@ namespace A4_Lampadaire {
         if (t < 0) t = 0
         else if (t > 60) t = 60
 
-        // Cancel any previous ramp
+        // Annule toute rampe précédente
         annulerEclairageEnCours()
         const myToken = eclairageToken
 
-        // Set target base color (at 100%)
+        // Définit la couleur cible (à 100%)
         switch (couleur) {
             case CouleurAllumage.Blanc:   couleurBase = 0xFFFFFF; break
             case CouleurAllumage.Bleu:    couleurBase = 0x0000FF; break
@@ -211,31 +242,31 @@ namespace A4_Lampadaire {
             case CouleurAllumage.Magenta: couleurBase = 0xFF00FF; break
         }
 
-        // Immediate
+        // Cas immédiat
         if (t == 0) {
             puissancePct = x2
             appliquerCouleur(puissancePct)
             return
         }
 
-        // 10 steps / second (max 600 steps)
+        // 10 pas / seconde (max 600 pas)
         const steps = t * 10
         const pauseMs = Math.idiv(t * 1000, steps)
 
-        // Start at x1
+        // Applique dès le départ x1
         appliquerCouleur(x1)
 
         for (let i = 0; i <= steps; i++) {
             if (eclairageToken != myToken) return
 
-            // Linear interpolation
+            // interpolation linéaire : pct = (x1*(steps-i) + x2*i)/steps
             const pct = Math.idiv(x1 * (steps - i) + x2 * i, steps)
             appliquerCouleur(pct)
 
             if (i < steps) basic.pause(pauseMs)
         }
 
-        // Store final power
+        // Mémorise la puissance finale
         puissancePct = x2
     }
 }
